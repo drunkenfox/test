@@ -35,6 +35,8 @@ import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -56,7 +58,9 @@ public class AddUserActivity extends AppCompatActivity {
     EditText etLastName;
     Bitmap imageBitmap;
     ProgressDialog progressDialog;
-    String picturePath;
+    String picPath;
+    String formattedDate;
+    File cachefile;
 
 
     @Override
@@ -83,17 +87,16 @@ public class AddUserActivity extends AppCompatActivity {
 
         if(imageBitmap != null){
 
-            Calendar c = Calendar.getInstance();
-            System.out.println("Current time => "+c.getTime());
+            /*Calendar c = Calendar.getInstance();
 
             SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
-            String formattedDate = df.format(c.getTime());
+            String formattedDate = df.format(c.getTime());*/
 
-            String s3url = "https://s3-us-west-2.amazonaws.com/mbi3/" + formattedDate + ".jpg";
+            String s3url = "https://s3-us-west-2.amazonaws.com/mbi3/" + formattedDate + ".png";
 
             u.setAvatar(s3url);
 
-            File file = new File(picturePath);
+            //File file = new File(picPath);
             // Initialize the Amazon Cognito credentials provider
             CognitoCachingCredentialsProvider credentialsProvider = new CognitoCachingCredentialsProvider(
                     getApplicationContext(),
@@ -105,10 +108,9 @@ public class AddUserActivity extends AppCompatActivity {
             TransferUtility transferUtility = new TransferUtility(s3, getApplicationContext());
             TransferObserver observer = transferUtility.upload(
                     "mbi3",     /* The bucket to upload to */
-                    formattedDate + ".jpg",    /* The key for the uploaded object */
-                    file        /* The file where the data to upload exists */
+                    formattedDate + ".png",    /* The key for the uploaded object */
+                    cachefile        /* The file where the data to upload exists */
             );
-
         }
         else {
             u.setAvatar("https://s3-us-west-2.amazonaws.com/mbi3/user.png");
@@ -138,10 +140,42 @@ public class AddUserActivity extends AppCompatActivity {
             Cursor cursor = getContentResolver().query(selectedImage,filePathColumn, null, null, null);
             cursor.moveToFirst();
             int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-            picturePath = cursor.getString(columnIndex);
+            String picturePath = cursor.getString(columnIndex);
             cursor.close();
-            imageBitmap = decodeSampledBitmapFromFile(picturePath, 128, 128);
+            imageBitmap = decodeSampledBitmapFromFile(picturePath, 96, 96);
             imageView.setImageBitmap(imageBitmap);
+
+            Calendar c = Calendar.getInstance();
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
+            formattedDate = df.format(c.getTime());
+
+            //create a file to write bitmap data
+            cachefile = new File(getApplicationContext().getCacheDir(), formattedDate);
+            try {
+                cachefile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            //Convert bitmap to byte array
+            Bitmap bitmap = imageBitmap;
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 0, bos);
+            byte[] bitmapdata = bos.toByteArray();
+
+            //write the bytes in file
+            FileOutputStream fos = null;
+            try {
+                fos = new FileOutputStream(cachefile);
+                fos.write(bitmapdata);
+                fos.flush();
+                fos.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
         }
     }
 

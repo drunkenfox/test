@@ -21,10 +21,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -62,8 +65,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        new JsonTask().execute(urlGet);
+        //new JsonTask().execute(urlGet);
 
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        new JsonTask().execute(urlGet);
     }
 
     @Override
@@ -106,9 +115,13 @@ public class MainActivity extends AppCompatActivity {
             //удалить
             case 0:
                 Log.d(TAG, "Selected item 0");
+                User u = myAdapter.getItem(info.position);
+                Log.d("UserId", u.getId());
+                Log.d("UserName", u.getFirst_name());
+                new deleteAsync(myAdapter.getItem(info.position).getId())
+                        .execute("https://3hpdtfuza3.execute-api.us-west-2.amazonaws.com/prod/myFunc");
                 myAdapter.removeItem(myAdapter.getItem(info.position));
                 myAdapter.notifyDataSetChanged();
-                new deleteAsync().execute("https://reqres.in/api/users/2");// + myAdapter.getItem(info.position).getId());
                 return true;
             //отмена
             case 1:
@@ -186,7 +199,7 @@ public class MainActivity extends AppCompatActivity {
             super.onPostExecute(response);
 
             //ArrayList<User> users = new ArrayList<>();
-
+            users.clear();
             if (progressDialog.isShowing()){
                 progressDialog.dismiss();
             }
@@ -216,6 +229,18 @@ public class MainActivity extends AppCompatActivity {
 
     //DELETE - запрос на удвление данных
     private class deleteAsync extends AsyncTask<String,Void,Void> {
+        private String key;
+        private String json;
+
+        public deleteAsync(String _key){
+            key = _key;
+            json = "{\"TableName\": \"users\",\n" +
+                    "      \"Key\":" +
+                    "{\"id\": "+
+                            "\""+ key +"\"" +"}}";
+            Log.d("Key", key);
+            Log.d("Json", json);
+        }
 
         @Override
         protected Void doInBackground(String... params) {
@@ -225,8 +250,29 @@ public class MainActivity extends AppCompatActivity {
                 HttpURLConnection httpURLConnection = (HttpURLConnection)url.openConnection();
                 httpURLConnection.setDoOutput(true);
                 httpURLConnection.setRequestMethod("DELETE");
-                httpURLConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                httpURLConnection.setRequestProperty("Content-Type", "application/json");
+                httpURLConnection.setRequestProperty("Accept", "application/json");
                 httpURLConnection.connect();
+
+                //Write
+                OutputStream outputStream = httpURLConnection.getOutputStream();
+                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, "UTF-8"));
+                writer.write(json);
+                writer.close();
+                outputStream.close();
+
+                //Read
+                BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(httpURLConnection.getInputStream(), "UTF-8"));
+
+                String line = null;
+                StringBuilder sb = new StringBuilder();
+
+                while ((line = bufferedReader.readLine()) != null) {
+                    sb.append(line);
+                }
+
+                bufferedReader.close();
+                Log.d("DeleteResult", sb.toString());
 
             } catch (MalformedURLException e) {
                 e.printStackTrace();
@@ -236,7 +282,5 @@ public class MainActivity extends AppCompatActivity {
 
             return null;
         }
-
-
     }
 }
