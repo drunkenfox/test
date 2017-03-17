@@ -4,16 +4,16 @@ package ru.redfox.myapp;
  * Created by Ilshat on 14.03.2017.
  */
 public class User {
-    private int id;
+    private String id;
     private String first_name;
     private String last_name;
     private String avatar;
 
-    public int getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(String id) {
         this.id = id;
     }
 

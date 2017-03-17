@@ -32,7 +32,7 @@ import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-    String urlGet = "https://reqres.in/api/users?page=2";
+    String urlGet = "https://3hpdtfuza3.execute-api.us-west-2.amazonaws.com/prod/myFunc?TableName=users";
     ProgressDialog progressDialog;
     String TAG="MyLog";
     ListView lvUsers;
@@ -63,8 +63,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
         new JsonTask().execute(urlGet);
-
-
 
     }
 
@@ -195,14 +193,14 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, String.valueOf(response));
 
             try {
-                JSONArray jarr = response.getJSONArray("data");
+                JSONArray jarr = response.getJSONArray("Items");
                 Log.d(TAG,jarr.toString());
                 for(int i = 0; i<jarr.length();i++){
                     User user = new User();
                     user.setFirst_name(jarr.getJSONObject(i).getString("first_name"));
                     user.setLast_name(jarr.getJSONObject(i).getString("last_name"));
                     user.setAvatar(jarr.getJSONObject(i).getString("avatar"));
-                    user.setId(jarr.getJSONObject(i).getInt("id"));
+                    user.setId(jarr.getJSONObject(i).getString("id"));
                     users.add(user);
                 }
 

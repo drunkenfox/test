@@ -8,25 +8,45 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.CognitoCachingCredentialsProvider;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferObserver;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferUtility;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.google.gson.Gson;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.UUID;
 
 public class AddUserActivity extends AppCompatActivity {
 
@@ -36,6 +56,7 @@ public class AddUserActivity extends AppCompatActivity {
     EditText etLastName;
     Bitmap imageBitmap;
     ProgressDialog progressDialog;
+    String picturePath;
 
 
     @Override
@@ -56,21 +77,50 @@ public class AddUserActivity extends AppCompatActivity {
     //Кнопка сохранить
     public void onSaveBtn(View v){
         User u = new User();
+        u.setId(UUID.randomUUID().toString());
         u.setFirst_name(etFirstName.getText().toString());
         u.setLast_name(etLastName.getText().toString());
 
         if(imageBitmap != null){
-            u.setAvatar(BitmapToString(imageBitmap));
+
+            Calendar c = Calendar.getInstance();
+            System.out.println("Current time => "+c.getTime());
+
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
+            String formattedDate = df.format(c.getTime());
+
+            String s3url = "https://s3-us-west-2.amazonaws.com/mbi3/" + formattedDate + ".jpg";
+
+            u.setAvatar(s3url);
+
+            File file = new File(picturePath);
+            // Initialize the Amazon Cognito credentials provider
+            CognitoCachingCredentialsProvider credentialsProvider = new CognitoCachingCredentialsProvider(
+                    getApplicationContext(),
+                    "us-west-2:90821c83-99a2-437d-996e-fe52ba2b09cf", // Identity Pool ID
+                    Regions.US_WEST_2 // Region
+            );
+            AmazonS3 s3 = new AmazonS3Client(credentialsProvider);
+
+            TransferUtility transferUtility = new TransferUtility(s3, getApplicationContext());
+            TransferObserver observer = transferUtility.upload(
+                    "mbi3",     /* The bucket to upload to */
+                    formattedDate + ".jpg",    /* The key for the uploaded object */
+                    file        /* The file where the data to upload exists */
+            );
+
         }
         else {
-            u.setAvatar(BitmapToString(BitmapFactory.decodeResource(getResources(),R.drawable.user)));
+            u.setAvatar("https://s3-us-west-2.amazonaws.com/mbi3/user.png");
         }
-
 
         Gson gson = new Gson();
         String json = gson.toJson(u);
 
-        new postAsync(json).execute("https://reqres.in/api/users");
+        json = "{\"TableName\": \"users\",\n" +
+                "      \"Item\":" + json +"}";
+
+        new postAsync(json).execute("https://3hpdtfuza3.execute-api.us-west-2.amazonaws.com/prod/myFunc");
 
         Toast.makeText(this,"Сохранено",Toast.LENGTH_LONG).show();
 
@@ -88,7 +138,7 @@ public class AddUserActivity extends AppCompatActivity {
             Cursor cursor = getContentResolver().query(selectedImage,filePathColumn, null, null, null);
             cursor.moveToFirst();
             int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-            String picturePath = cursor.getString(columnIndex);
+            picturePath = cursor.getString(columnIndex);
             cursor.close();
             imageBitmap = decodeSampledBitmapFromFile(picturePath, 128, 128);
             imageView.setImageBitmap(imageBitmap);
@@ -167,15 +217,6 @@ public class AddUserActivity extends AppCompatActivity {
             json = _json;
         }
 
-        protected void onPreExecute() {
-            super.onPreExecute();
-
-            progressDialog = new ProgressDialog(AddUserActivity.this);
-            progressDialog.setMessage("Загрузка...");
-            progressDialog.setCancelable(false);
-            progressDialog.show();
-        }
-
         @Override
         protected Void doInBackground(String... params) {
 
@@ -185,21 +226,33 @@ public class AddUserActivity extends AppCompatActivity {
                 httpURLConnection.setDoOutput(true);
                 httpURLConnection.setRequestMethod("POST");
                 httpURLConnection.setRequestProperty("Content-Type", "application/json");
+                httpURLConnection.setRequestProperty("Accept", "application/json");
                 httpURLConnection.connect();
 
-                DataOutputStream wr = new DataOutputStream(httpURLConnection.getOutputStream());
-                wr.writeBytes(json);
-                wr.flush();
-                wr.close();
+                //Write
+                OutputStream outputStream = httpURLConnection.getOutputStream();
+                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, "UTF-8"));
+                writer.write(json);
+                writer.close();
+                outputStream.close();
+
+                //Read
+                BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(httpURLConnection.getInputStream(), "UTF-8"));
+
+                String line = null;
+                StringBuilder sb = new StringBuilder();
+
+                while ((line = bufferedReader.readLine()) != null) {
+                    sb.append(line);
+                }
+
+                bufferedReader.close();
+                Log.d("PostResult", sb.toString());
 
             } catch (MalformedURLException e) {
                 e.printStackTrace();
             } catch (IOException e) {
                 e.printStackTrace();
-            }
-
-            if (progressDialog.isShowing()){
-                progressDialog.dismiss();
             }
 
             return null;
